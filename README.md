@@ -1,1 +1,23 @@
 # AKS-terraform-pipeline
+
+# AKS with Terraform and CI/CD
+
+## 📘 Description
+This project provisions an Azure Kubernetes Service (AKS) cluster using Terraform, deploys a sample application, and sets up CI/CD pipelines with Azure DevOps for:
+- Terraform security scanning (Checkov)
+- Infrastructure provisioning
+- Docker image build & push to Azure Container Registry (ACR)
+- Kubernetes deployment to AKS
+- Optional Grafana dashboard export
+
+---
+
+## 🔧 Prerequisites
+- Terraform (latest version)
+- Azure CLI
+- Docker
+- kubectl
+- Azure DevOps account
+- GitHub repository
+
+
