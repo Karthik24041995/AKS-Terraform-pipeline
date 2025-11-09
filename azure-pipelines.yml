@@ -1,0 +1,85 @@
+trigger:
+  - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  terraformDirectory: 'terraform'
+  dockerImageName: 'sampleapp'
+  acrLoginServer: '<your-acr-name>.azurecr.io'
+  aksClusterName: '<your-aks-cluster>'
+  aksResourceGroup: '<your-aks-resource-group>'
+  containerRegistry: '<your-service-connection-name>'
+  azureSubscription: '<your-service-connection-name>'
+
+stages:
+  - stage: TerraformScan
+    displayName: 'Terraform Security Scan'
+    jobs:
+      - job: CheckovScan
+        steps:
+          - checkout: self
+          - script: |
+              pip install checkov
+              checkov -d $(terraformDirectory)
+            displayName: 'Run Checkov Scan'
+
+  - stage: TerraformDeploy
+    dependsOn: TerraformScan
+    jobs:
+      - job: TerraformApply
+        steps:
+          - checkout: self
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: 'latest'
+          - script: |
+              cd $(terraformDirectory)
+              terraform init
+              terraform plan -out=tfplan
+              terraform apply -auto-approve tfplan
+            displayName: 'Terraform Init, Plan & Apply'
+
+  - stage: DockerBuildPush
+    dependsOn: TerraformDeploy
+    jobs:
+      - job: BuildAndPush
+        steps:
+          - checkout: self
+          - task: Docker@2
+            inputs:
+              containerRegistry: $(containerRegistry)
+              repository: $(dockerImageName)
+              command: buildAndPush
+              Dockerfile: 'app/Dockerfile'
+              tags: |
+                latest
+
+  - stage: DeployToAKS
+    dependsOn: DockerBuildPush
+    jobs:
+      - job: DeployApp
+        steps:
+          - checkout: self
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks get-credentials --name $(aksClusterName) --resource-group $(aksResourceGroup)
+                kubectl apply -f k8s/deployment.yaml
+                kubectl apply -f k8s/service.yaml
+            displayName: 'Deploy to AKS'
+
+  - stage: ExportGrafanaReports
+    dependsOn: DeployToAKS
+    condition: succeeded()
+    jobs:
+      - job: ExportReports
+        steps:
+          - script: |
+              echo "Exporting Grafana dashboards..."
+              # Add Grafana API call or export script here
+            displayName: 'Export Grafana Reports'
